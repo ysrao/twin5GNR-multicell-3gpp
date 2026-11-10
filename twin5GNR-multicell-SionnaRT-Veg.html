@@ -44,7 +44,7 @@ Cell C <input id="cx" value="500" size="4">,<input id="cy" value="750" size="4">
 <ul>
 <li><b>Coverage (RSRP ≥ −90 dBm):</b> 3GPP UMa 100.0% vs Sionna 80.5% vs Sionna + trees 80.5% — trees change nothing at the coverage level.</li>
 <li><b>Median best-server RSRP:</b> 3GPP -31.9 dBm vs Sionna -72.7 dBm vs Sionna + trees -72.7 dBm. Trees: median change +0.0 dB, mean -0.18 dB.</li>
-<li><b>Where trees bite:</b> 4.0% of cells lose more than 1 dB to foliage; worst cell loses -11.7 dB. Best server changes on only 0.2% of cells. Handoff region (&lt;3 dB, sector level): 3GPP 20.5% vs Sionna 3.4% vs Sionna + trees 3.5%.</li>
+<li><b>Where trees bite:</b> 4.0% of cells lose more than 1 dB to foliage; worst cell loses -11.7 dB. Best server changes on only 0.2% of cells. Handoff region (&lt;3 dB best vs second-best sector, share of all 625 cells): 3GPP 19.4% vs Sionna 10.6% vs Sionna + trees 10.7% (Sionna split: inter-tower 5.4% / 5.6%, intra-tower 5.1%).</li>
 <li><b>Why so small at 3.6 GHz:</b> P.833 foliage loss at 3.6 GHz saturates at Am = 38 dB but needs long in-canopy paths to build up; mean foliage depth here is 4.07 m (mean P.833 loss 2.02 dB), and most of the ray-traced power at street level is non-LOS, so the LOS-weighted foliage term barely moves the total. The same surveyed trees cut 28 GHz throughput by 15–33% at 100–500 m in the earlier SF vegetation run — at 3.6 GHz they are a tail effect, not a coverage effect. That is a measured result here, not an assumption.</li>
 <li><b>LiDAR sensitivity (not in the toggle):</b> free USGS 3DEP LiDAR independently confirms 97.6% of the surveyed trees within 2 m, and adds park/private canopy the street survey misses. But its canopy-height layer, used directly, gives mean foliage depth 43.5 m versus 4.07 m from the surveyed positions — ~10× — because it has no crown bottom and counts clutter and buildings OSM misses. Even after roof-exclusion and a 6 m crown thickness it stays ~14–20 m. A hybrid (surveyed + non-street LiDAR canopy) gives mean depth 14.25 m, median RSRP change +0.0 dB, mean -0.60 dB, 10.1% of cells below −1 dB — still small at 3.6 GHz, and still an upper bound. So the toggle uses the surveyed trees only; the LiDAR layer is reported here, not embedded.</li>
 </ul>
@@ -112,13 +112,14 @@ function sionnaCell(x,y,grid){
  for(let i=0;i<grid.ys.length;i++){ const d=Math.abs(grid.ys[i]-ey); if(d<bd){bd=d;ri=i;} }
  return grid.rsrp[ri*25+ci];
 }
+const SIONNA_TOWERS=[{name:'A',tower:'A',x:250,y:250,color:'#2f7fe0'},{name:'B',tower:'B',x:750,y:250,color:'#e07f2f'},{name:'C',tower:'C',x:500,y:750,color:'#7f2fe0'}];
 function isSionna(){ return model()==='sionna'||model()==='sionna_veg'; }
 function rsrps(x,y){
  if(isSionna()){
   const grid=(model()==='sionna_veg')?SIONNA_VEG:SIONNA;
   const cell=grid.rsrp ? sionnaCell(x,y,grid) : null;
   const out=[];
-  const tws=[{name:'A',x:250,y:250,color:'#2f7fe0'},{name:'B',x:750,y:250,color:'#e07f2f'},{name:'C',x:500,y:750,color:'#7f2fe0'}];
+  const tws=SIONNA_TOWERS;
   tws.forEach((tw,ti)=>{
    [0,1,2].forEach(si=>{
     const v=cell?cell[ti][si]:null;
@@ -161,7 +162,7 @@ function draw(){
    }
   }
  }
- [...new Map(cells().map(c=>[c.tower,c])).values()].forEach(c=>{
+ (isSionna()?SIONNA_TOWERS:[...new Map(cells().map(c=>[c.tower,c])).values()]).forEach(c=>{
   ctx.fillStyle='#000'; ctx.beginPath(); ctx.moveTo(c.x*0.6, c.y*0.6-10); ctx.lineTo(c.x*0.6-9, c.y*0.6+8); ctx.lineTo(c.x*0.6+9, c.y*0.6+8); ctx.closePath(); ctx.fill();
   ctx.font='bold 14px sans-serif'; ctx.fillText('Tower '+c.tower, c.x*0.6+12, c.y*0.6);
  });
@@ -174,15 +175,14 @@ function draw(){
  const tbody=document.querySelector('#uetable tbody'); tbody.innerHTML='';
  UEs.forEach(u=>{
   const r=rsrps(u.x,u.y);
-  const sinrDb=r[0].rsrp-(r[0].rsrp-3); // modelled interference 3 dB below, gives ~3 dB SINR floor in this simple version; use RSRP-based SINR below instead
-  // Use a simple SINR: serving RSRP minus noise floor in BW, capped at 20 dB
+   // Use a simple SINR: serving RSRP minus noise floor in BW, capped at 20 dB
   const noise=-174+10*log10(bw*1e6)+7;
   let sinr=Math.min(20, r[0].rsrp-noise);
   const fEff=isSionna()?3.6:f;
   const dop=u.speed/3.6*fEff*1e9/3e8;
   // ICI model, stated approximation, not a 3GPP standard factor:
-  // SCS by frequency: 0.7 GHz -> 15 kHz, 3.5 -> 30 kHz, 7.125 -> 60 kHz, 28 -> 120 kHz
-  const scs = fEff<=0.7?15 : fEff<=3.5?30 : fEff<=7.125?60 : 120; // kHz
+  // SCS by frequency: 0.7 GHz -> 15 kHz, 3.5/3.6 (n78) -> 30 kHz, 7.125 -> 60 kHz, 28 -> 120 kHz
+  const scs = fEff<=0.7?15 : fEff<=3.8?30 : fEff<=7.125?60 : 120; // kHz
   const iciRatio = Math.pow(dop/(scs*1000),2) * (Math.PI*Math.PI/3); // (pi*fd/df)^2 / 3
   const sinrLin = Math.pow(10,sinr/10);
   const sinrEffLin = 1/(1/sinrLin + iciRatio);
@@ -204,7 +204,7 @@ function draw(){
   tr.innerHTML=`<td>${u.id}</td><td>${u.speed} km/h</td><td>${Math.round(u.x)}, ${Math.round(u.y)}</td><td>${r[0].cell.name} (Tower ${r[0].cell.tower}, ${r[0].cell.az}°)</td><td>${r[0].rsrp<=-999?'no ray':r[0].rsrp.toFixed(1)}</td><td>${r[1].cell.name} / ${diff.toFixed(1)}</td><td>${hoType} (thr ${thr} dB)</td><td>${dop.toFixed(0)}</td><td>${capDL.toFixed(0)}</td><td>${capUL.toFixed(0)}</td><td>${iciRatio.toExponential(2)}</td><td>${degr.toFixed(2)}% (SCS ${scs} kHz)</td>`;
   tbody.appendChild(tr);
  });
- document.getElementById('status').textContent='Run done. Model '+(model()==='sionna'?'Sionna ray-traced 3.6 GHz':model()==='sionna_veg'?'Sionna + trees 3.6 GHz':'3GPP '+f+' GHz')+', '+document.getElementById('morph').value+', MIMO '+mimo+'×'+mimo+'.';
+ document.getElementById('status').textContent='Run done. Model '+(model()==='sionna'?'Sionna ray-traced 3.6 GHz (fixed band, fixed towers)':model()==='sionna_veg'?'Sionna + trees 3.6 GHz (fixed band, fixed towers)':'3GPP '+f+' GHz, '+document.getElementById('morph').value)+', MIMO '+mimo+'×'+mimo+'.';
  var _rb=document.getElementById('runBtn');_rb.textContent='Run';_rb.style.backgroundColor='#fff';_rb.style.color='';
 }
 function markStale(){var b=document.getElementById('runBtn');b.textContent='Run — settings changed';b.style.backgroundColor='#2e9e44';b.style.color='#fff';}
