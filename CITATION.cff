@@ -1,0 +1,26 @@
+cff-version: 1.2.0
+message: "If you use this package in teaching or research, please cite it as below."
+title: "SF Multicell Twin: An Open 5G NR Ray-Tracing Lab (Sionna RT on a Free T4)"
+version: 1.0.0
+date-released: 2026-11-13
+authors:
+  - family-names: Yenamandra
+    given-names: Rao S.
+license: MIT
+repository-code: "https://github.com/ysrao/twin5GNR-multicell-SF"
+url: "https://ysrao.github.io/twin5GNR-multicell-SF/twin5GNR-multicell-SionnaRT-EvalMesh-Nov13.html"
+abstract: >-
+  A reproducible 5G NR multicell ray-tracing package: a three-site,
+  nine-sector layout at 3.6 GHz traced with Sionna RT over a downtown
+  San Francisco city tile, runnable end-to-end on a free Colab T4 with
+  reader-local data, with CSV-driven tower-shift experiments and an
+  interactive artefact wired to the trace output. Includes a controlled
+  comparison showing that city-mesh provenance is a first-order variable
+  in ray-traced coverage.
+keywords:
+  - 5G NR
+  - ray tracing
+  - Sionna RT
+  - digital twin
+  - radio propagation
+  - open educational resource
