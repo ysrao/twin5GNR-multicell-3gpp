@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>5G NR Multicell Twin v7 — 3GPP only</title>
+<style>
+body{font-family:system-ui,Arial,sans-serif;margin:16px;color:#111;max-width:1100px}
+h1{font-size:22px} h2{font-size:16px}
+label{margin-right:12px} select,input{margin:4px;min-height:44px;font-size:16px}
+canvas{border:1px solid #333;background:#fff;max-width:100%;touch-action:none}
+table{border-collapse:collapse;width:100%;margin-top:12px} th,td{border:1px solid #bbb;padding:4px 6px;text-align:left;font-size:13px}
+.note{background:#f2f2f2;padding:10px;border-left:4px solid #333}
+.legend span{display:inline-block;width:14px;height:14px;vertical-align:middle;margin-right:4px}
+button{padding:8px 14px;font-size:15px;min-height:44px}
+.runbar{position:sticky;top:0;background:#fff;padding:8px 0;z-index:10;border-bottom:1px solid #ddd}
+#runBtn{transition:background-color .15s}
+.stats{font-size:15px}
+.stats b{font-size:17px}
+</style></head><body>
+<h1>5G NR Multicell Twin v7 — 3GPP only</h1>
+<p><b>Map:</b> San Francisco 1 km × 1 km, downtown tile (centre 37.801105, −122.404175), 3 towers × 3 sectors. <b>Model:</b> 3GPP TR 38.901 (modelled) — computed live on CPU. <b>All figures are modelled, never measured.</b> This is a 3GPP-only rebuild of v7: the Sionna and Sionna + trees modes of v7 are <b>not</b> included — they are ray-traced data that need a GPU retrace and cannot be recomputed here. Move a tower and press Run: the map, the coverage figures, the median RSRP and the handoff region all recompute. Version inside the file: v7-3gpp.</p>
+<div>
+<label>Frequency <select id="freq"><option value="0.7">0.7 GHz</option><option value="3.5">3.5 GHz</option><option value="3.6" selected>3.6 GHz</option><option value="7.125">7.125 GHz</option><option value="28">28 GHz</option></select></label>
+<label>Morphology <select id="morph"><option value="UMa" selected>Urban Macro (UMa)</option><option value="UMi">Urban Micro / Street Canyon (UMi)</option><option value="RMa">Rural Macro (RMa)</option></select></label>
+<label>MIMO <select id="mimo"><option value="2">2×2</option><option value="4" selected>4×4</option><option value="8">8×8</option><option value="64">Massive MIMO 64</option></select></label>
+<label>EIRP (dBm) <input id="eirp" type="number" value="47" min="30" max="60"></label>
+<label>Bandwidth (MHz) <input id="bw" type="number" value="100" min="10" max="400"></label>
+</div>
+<div>
+<label>Cell locations (m, x,y in 1000×1000 grid, editable) — Cell A <input id="ax" value="250" size="4">,<input id="ay" value="250" size="4">, height <input id="ah" type="number" value="25" min="5" max="100" size="4"> m AGL
+Cell B <input id="bx" value="750" size="4">,<input id="by" value="250" size="4">, height <input id="bh" type="number" value="25" min="5" max="100" size="4"> m AGL
+Cell C <input id="cx" value="500" size="4">,<input id="cy" value="750" size="4">, height <input id="ch" type="number" value="25" min="5" max="100" size="4"> m AGL</label>
+</div>
+<div>
+<label>Shifted-site preset (from SF_sites_for_Sameer.csv, v7 rows) <select id="preset">
+<option value="">As-built (all towers)</option>
+<option value="A-E">A +125 m E (20 m)</option>
+<option value="A-W">A +125 m W (30 m)</option>
+<option value="A-N">A +125 m N (35 m)</option>
+<option value="A-S">A +125 m S (50 m)</option>
+<option value="B-E">B +125 m E (20 m)</option>
+<option value="B-W">B +125 m W (30 m)</option>
+<option value="B-N">B +125 m N (35 m)</option>
+<option value="B-S">B +125 m S (50 m)</option>
+<option value="C-E">C +125 m E (20 m)</option>
+<option value="C-W">C +125 m W (30 m)</option>
+<option value="C-N">C +125 m N (35 m)</option>
+<option value="C-S">C +125 m S (50 m)</option>
+</select></label>
+<button id="resetBtn">Reset as-built</button>
+<span id="presetNote"></span>
+</div>
+<p id="runBar" class="runbar"><button id="runBtn">Run</button> <button id="animBtn">Play movement</button> <span id="status"></span></p>
+<p class="stats" id="stats"></p>
+<p><b>Drag a tower marker (▲) on the map to move it</b> — the position boxes update live; release to recompute. One tower at a time; the others do not move. Dragging clears the preset (custom position). For exact positions, type the numbers instead, then press Run.</p>
+<canvas id="map" width="600" height="600"></canvas>
+<p class="legend">
+<span style="background:#2f7fe0"></span>Cell A &nbsp;
+<span style="background:#e07f2f"></span>Cell B &nbsp;
+<span style="background:#7f2fe0"></span>Cell C &nbsp;
+<span style="background:#fff;border:1px solid #000"></span>White dots = Inter-tower HO region for the selected UE &nbsp; Yellow squares = Intra-tower sector HO region (same tower, different sector) &nbsp;
+▲ = tower &nbsp; ● = UE
+</p>
+<div class="note"><b>How to read this:</b> Colour = best server (strongest RSRP, modelled) at that point. White dots = handoff region, where the best and second-best cells are within 1 CQI of each other — a UE there would normally hand over, and ping-pong is possible. The trigger is the UE-reported CQI (quantised SINR, 0-15): the UE measures SINR on every sector, maps it to CQI, and reports it; the network hands over when a neighbour's CQI beats the serving cell's CQI. <b>CQI ≥ 1 floor (applied):</b> CQI 0 means out of range / no usable link, and CQI 0 cells do <b>not</b> count as handoff candidates. SINR here is the real one — serving RSRP against all other sectors' RSRP plus thermal noise — not the old 3 dB-below-serving assumption. Triangle = tower. Dot = UE, with its label. RSRP = EIRP − path loss, modelled. Capacity = bandwidth × log2(1+SINR) × MIMO streams, capped at the MIMO order, modelled, not measured throughput. Doppler = speed × frequency / speed of light, shown per UE. Morphology changes path loss only; it does not change the map shape.</div>
+<table id="uetable"><thead><tr><th>UE</th><th>Mobility / speed</th><th>Position (m)</th><th>Serving sector</th><th>RSRP (dBm)</th><th>Best neighbour / CQI (SINR)</th><th>Handoff? (CQI trigger, floored)</th><th>Doppler (Hz)</th><th>DL cap PDSCH (Mbps)</th><th>UL cap PUSCH (Mbps)</th><th>ICI ratio</th><th>ICI degradation</th></tr></thead><tbody></tbody></table>
+<div class="note"><b>Assumptions, stated:</b> 3GPP TR 38.901 simplified LOS path loss, with 3D distance: UMa 28.0 + 22·log10(d) + 20·log10(f); UMi 32.4 + 21·log10(d) + 20·log10(f); RMa 20·log10(d) + 20·log10(f) + 20 approx., d = √(d₂D² + (h_tower − 1.5)²) in metres (UE height 1.5 m, street level), f in GHz, minimum distance 10 m. The v7 source used 2D distance only and stated no tower height; here heights enter through the 3D distance, which is the TR 38.901 form. <b>As-built tower height is not stated in the v7 source — the 25 m default is assumed (3GPP UMa typical), labelled as assumed.</b> Noise −174 dBm/Hz, noise figure 7 dB, SINR is computed per sector from all sectors' RSRP plus thermal noise; the UE reports it as CQI (0-15, ~2 dB steps from -6 dB, stated approx.), and handover is decided on CQI with the CQI ≥ 1 floor above. ICI degradation, calculated (not assumed as a flat factor): ICI ratio = (π·f_D / Δf)² / 3, where f_D is Doppler and Δf is subcarrier spacing (15 kHz at 0.7 GHz, 30 kHz at 3.5/3.6 GHz, 60 kHz at 7.125 GHz, 120 kHz at 28 GHz, stated). Effective SINR = 1 / (1/SINR + ICI ratio), for both DL and UL. DL uses tower EIRP and selected MIMO; UL uses UE power 23 dBm and MIMO capped at 2, so UL is usually lower. Antenna pattern is directional 65° per sector: gain 15 dBi at boresight, falling as 12·(angle/65)², capped at 25 dB down, per 3GPP TR 38.901 simplified pattern. Each tower has 3 sectors at 0°, 120° and 240°. UEs move in straight lines and bounce at the grid edge. This is a teaching / planning sketch, not a site survey. <b>Coverage note:</b> in this 3GPP UMa model at EIRP 47 dBm the 1 km tile is fully covered at RSRP ≥ −90 dBm for any tower position inside the tile, so that figure stays 100.0% when a tower moves — the move shows up in the map, the median RSRP, the handoff region, and the strong-coverage (≥ −70 dBm) share below.</div>
+<div class="note"><b>Shifted-site presets — lat/lon to grid conversion (WGS84, tile centre 37.801105, −122.404175):</b> 1° latitude = 110,992.7 m; 1° longitude = 88,069.2 m. Grid x = 500 + (lon − lon₀)·88,069.2; grid y = 500 + (lat₀ − lat)·110,992.7 (y grows southward). As-built from the CSV: A (249.7, 250.7), B (750.3, 250.7), C (500.0, 749.3) — within 1 m of the v7 defaults (250, 250), (750, 250), (500, 750); preset grid values are rounded to the nearest metre. Applying a preset moves that one tower to its shifted position and height and resets the other two towers to as-built (25 m assumed). v7 source reference figures (3GPP, 3.5 GHz): coverage ≥ −90 dBm 100.0%, median best-server RSRP −31.9 dBm; floored handoff region 12.6% (deck figure).
+<table><thead><tr><th>Preset</th><th>Latitude</th><th>Longitude</th><th>Height (m AGL)</th><th>Grid x, y (m)</th></tr></thead><tbody>
+<tr><td>A-E</td><td>37.803351</td><td>−122.405596</td><td>20</td><td>375, 251</td></tr>
+<tr><td>A-W</td><td>37.803351</td><td>−122.408438</td><td>30</td><td>125, 251</td></tr>
+<tr><td>A-N</td><td>37.804474</td><td>−122.407017</td><td>35</td><td>250, 126</td></tr>
+<tr><td>A-S</td><td>37.802228</td><td>−122.407017</td><td>50</td><td>250, 375</td></tr>
+<tr><td>B-E</td><td>37.803351</td><td>−122.399912</td><td>20</td><td>875, 251</td></tr>
+<tr><td>B-W</td><td>37.803351</td><td>−122.402754</td><td>30</td><td>625, 251</td></tr>
+<tr><td>B-N</td><td>37.804474</td><td>−122.401333</td><td>35</td><td>750, 126</td></tr>
+<tr><td>B-S</td><td>37.802228</td><td>−122.401333</td><td>50</td><td>750, 375</td></tr>
+<tr><td>C-E</td><td>37.798859</td><td>−122.402754</td><td>20</td><td>625, 749</td></tr>
+<tr><td>C-W</td><td>37.798859</td><td>−122.405596</td><td>30</td><td>375, 749</td></tr>
+<tr><td>C-N</td><td>37.799982</td><td>−122.404175</td><td>35</td><td>500, 625</td></tr>
+<tr><td>C-S</td><td>37.797736</td><td>−122.404175</td><td>50</td><td>500, 874</td></tr>
+</tbody></table></div>
+<p>5G NR Multicell Twin v7 — 3GPP-only rebuild (CPU, no GPU, no Sionna). Source: v7 live file twin5GNR-multicell-SionnaRT-Veg.html (3GPP TR 38.901 model, CQI trigger); Sionna modes omitted — they need a GPU ray-trace retrace. Presets from SF_sites_for_Sameer.csv (v7 rows).</p>
+<script>
+const canvas=document.getElementById('map'), ctx=canvas.getContext('2d');
+let anim=false, animId=null;
+const UEs=[
+ {id:'UE1 Static',speed:0,x:300,y:400,vx:0,vy:0},
+ {id:'UE2 Pedestrian 3 km/h',speed:3,x:200,y:600,vx:0.83,vy:0},
+ {id:'UE3 Cyclist 15 km/h',speed:15,x:600,y:500,vx:-4.17,vy:1},
+ {id:'UE4 Car 30 km/h',speed:30,x:400,y:200,vx:8.33,vy:0},
+ {id:'UE5 Car 60 km/h',speed:60,x:800,y:700,vx:-16.67,vy:0},
+ {id:'UE6 High-speed 120 km/h',speed:120,x:100,y:100,vx:33.33,vy:10},
+];
+const ASBUILT={A:{x:250,y:250,h:25},B:{x:750,y:250,h:25},C:{x:500,y:750,h:25}};
+const PRESETS={
+ 'A-E':{tower:'A',x:375,y:251,h:20,lat:37.803351,lon:-122.405596},
+ 'A-W':{tower:'A',x:125,y:251,h:30,lat:37.803351,lon:-122.408438},
+ 'A-N':{tower:'A',x:250,y:126,h:35,lat:37.804474,lon:-122.407017},
+ 'A-S':{tower:'A',x:250,y:375,h:50,lat:37.802228,lon:-122.407017},
+ 'B-E':{tower:'B',x:875,y:251,h:20,lat:37.803351,lon:-122.399912},
+ 'B-W':{tower:'B',x:625,y:251,h:30,lat:37.803351,lon:-122.402754},
+ 'B-N':{tower:'B',x:750,y:126,h:35,lat:37.804474,lon:-122.401333},
+ 'B-S':{tower:'B',x:750,y:375,h:50,lat:37.802228,lon:-122.401333},
+ 'C-E':{tower:'C',x:625,y:749,h:20,lat:37.798859,lon:-122.402754},
+ 'C-W':{tower:'C',x:375,y:749,h:30,lat:37.798859,lon:-122.405596},
+ 'C-N':{tower:'C',x:500,y:625,h:35,lat:37.799982,lon:-122.404175},
+ 'C-S':{tower:'C',x:500,y:874,h:50,lat:37.797736,lon:-122.404175},
+};
+function log10(x){return Math.log(x)/Math.LN10}
+function pathLoss(d2d,hTower,f,morph){
+ var d3d=Math.sqrt(d2d*d2d+(hTower-1.5)*(hTower-1.5));
+ var d=Math.max(d3d,10);
+ if(morph==='UMa') return 28.0+22*log10(d)+20*log10(f);
+ if(morph==='UMi') return 32.4+21*log10(d)+20*log10(f);
+ return 20*log10(d)+20*log10(f)+20;
+}
+function towers(){
+ return [
+  {name:'A',x:+document.getElementById('ax').value,y:+document.getElementById('ay').value,h:+document.getElementById('ah').value,color:'#2f7fe0'},
+  {name:'B',x:+document.getElementById('bx').value,y:+document.getElementById('by').value,h:+document.getElementById('bh').value,color:'#e07f2f'},
+  {name:'C',x:+document.getElementById('cx').value,y:+document.getElementById('cy').value,h:+document.getElementById('ch').value,color:'#7f2fe0'},
+ ];
+}
+function cells(){
+ const out=[];
+ towers().forEach(function(tw){
+  [0,120,240].forEach(function(az,si){
+   out.push({name:tw.name+(si+1),tower:tw.name,az:az,x:tw.x,y:tw.y,h:tw.h,color:tw.color});
+  });
+ });
+ return out;
+}
+function angleDiff(a,b){ let d=a-b; while(d>180)d-=360; while(d<-180)d+=360; return d; }
+function sectorGain(cell,x,y){
+ const ang=Math.atan2(y-cell.y,x-cell.x)*180/Math.PI;
+ const diff=Math.abs(angleDiff(ang,cell.az));
+ return 15-Math.min(12*Math.pow(diff/65,2),25);
+}
+function cellSectors(x,y){
+ const f=+document.getElementById('freq').value, morph=document.getElementById('morph').value, eirp=+document.getElementById('eirp').value;
+ const arr=cells().map(function(c){
+  const d=Math.hypot(x-c.x,y-c.y);
+  return {cell:c,rsrp:eirp+sectorGain(c,x,y)-pathLoss(d,c.h,f,morph),d:d};
+ });
+ arr.sort(function(a,b){return b.rsrp-a.rsrp;});
+ return arr;
+}
+// SINR + CQI (real-network trigger): UE measures RSRP from every sector,
+// SINR_i = RSRP_i / (sum of all other sectors' RSRP + thermal noise), noise =
+// -174 dBm/Hz + 10*log10(BW) + 7 dB NF, BW from the menu. UE reports CQI,
+// the 3GPP quantised SINR (0-15, ~2 dB steps from -6 dB, stated approx.,
+// TS 38.214 style). Handoff is decided on CQI, not on raw RSRP.
+// CQI >= 1 FLOOR (applied): CQI 0 means out of range / no usable link and
+// CQI 0 cells do not count as handoff candidates.
+function sinrCqiFrom(arr,bw){
+ const noise=-174+10*log10(bw*1e6)+7, noiseLin=Math.pow(10,noise/10);
+ let tot=0; arr.forEach(function(o){ tot+=Math.pow(10,o.rsrp/10); });
+ const out=arr.map(function(o){
+  const interf=tot-Math.pow(10,o.rsrp/10)+noiseLin;
+  const sinr=10*log10(Math.pow(10,o.rsrp/10)/interf);
+  const cqi=Math.max(0,Math.min(15,Math.floor((sinr+6)/2)+1));
+  return {cell:o.cell,rsrp:o.rsrp,d:o.d,sinr:sinr,cqi:cqi};
+ });
+ out.sort(function(a,b){return b.cqi-a.cqi || b.sinr-a.sinr;});
+ return out;
+}
+let lastGrid=null;
+function computeGrid(){
+ const bw=+document.getElementById('bw').value;
+ const N=60, total=N*N;
+ let cov90=0, cov70=0, ho=0;
+ const bestRsrps=[];
+ const cellsArr=[];
+ for(let gy=0;gy<N;gy++) for(let gx=0;gx<N;gx++){
+  const x=gx*10+5, y=gy*10+5;
+  const r=cellSectors(x,y);
+  const sc=sinrCqiFrom(r,bw);
+  bestRsrps.push(r[0].rsrp);
+  if(r[0].rsrp>=-90) cov90++;
+  if(r[0].rsrp>=-70) cov70++;
+  let hoType=null;
+  // Handoff region, CQI >= 1 floor: CQI 0 cells are not candidates.
+  if(sc[0].cqi>=1 && sc[1].cqi>=1 && sc[0].cqi-sc[1].cqi<=1){
+   ho++;
+   hoType=(sc[0].cell.tower===sc[1].cell.tower)?'intra':'inter';
+  }
+  cellsArr.push({color:r[0].cell.color,alpha:r[0].rsrp>-90?0.9:r[0].rsrp>-110?0.55:0.3,ho:hoType,gx:gx,gy:gy});
+ }
+ bestRsrps.sort(function(a,b){return a-b;});
+ return {cells:cellsArr,cov90:100*cov90/total,cov70:100*cov70/total,med:bestRsrps[Math.floor(total/2)],ho:100*ho/total,total:total};
+}
+function paintGrid(cells){
+ cells.forEach(function(c){
+  ctx.fillStyle=c.color;
+  ctx.globalAlpha=c.alpha;
+  ctx.fillRect(c.gx*10,c.gy*10,10,10);
+  ctx.globalAlpha=1;
+  if(c.ho==='intra'){
+   ctx.fillStyle='#ff0'; ctx.fillRect(c.gx*10+3,c.gy*10+3,4,4);
+  } else if(c.ho==='inter'){
+   ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(c.gx*10+5,c.gy*10+5,2,0,7); ctx.fill();
+  }
+ });
+ towers().forEach(function(c){
+  ctx.fillStyle='#000'; ctx.beginPath(); ctx.moveTo(c.x*0.6, c.y*0.6-10); ctx.lineTo(c.x*0.6-9, c.y*0.6+8); ctx.lineTo(c.x*0.6+9, c.y*0.6+8); ctx.closePath(); ctx.fill();
+  ctx.font='bold 14px sans-serif'; ctx.fillText('Tower '+c.name, c.x*0.6+12, c.y*0.6);
+ });
+ UEs.forEach(function(u){
+  ctx.fillStyle='#000'; ctx.beginPath(); ctx.arc(u.x*0.6,u.y*0.6,6,0,7); ctx.fill();
+  ctx.font='12px sans-serif'; ctx.fillText(u.id, u.x*0.6+8, u.y*0.6);
+ });
+}
+function draw(){
+ const f=+document.getElementById('freq').value;
+ const bw=+document.getElementById('bw').value;
+ const g=computeGrid();
+ lastGrid=g;
+ paintGrid(g.cells);
+ document.getElementById('stats').innerHTML=
+  'Coverage RSRP ≥ −90 dBm (modelled): <b>'+g.cov90.toFixed(1)+'%</b> &nbsp; '+
+  'Strong coverage RSRP ≥ −70 dBm (modelled): <b>'+g.cov70.toFixed(1)+'%</b> &nbsp; '+
+  'Median best-server RSRP (modelled): <b>'+g.med.toFixed(1)+' dBm</b> &nbsp; '+
+  'Handoff region, CQI ≥ 1 floor (modelled): <b>'+g.ho.toFixed(1)+'%</b> &nbsp; '+
+  'Cells: '+g.total+' (60×60 at 10 m).';
+ // UE table
+ const mimo=+document.getElementById('mimo').value;
+ const tbody=document.querySelector('#uetable tbody'); tbody.innerHTML='';
+ UEs.forEach(function(u){
+  const r=cellSectors(u.x,u.y);
+  const noise=-174+10*log10(bw*1e6)+7;
+  const sc=sinrCqiFrom(r,bw);
+  const serv=sc.find(function(o){return o.cell.name===r[0].cell.name;}) || sc[0];
+  const sinr=serv.sinr;
+  const dop=u.speed/3.6*f*1e9/3e8;
+  const scs = f<=0.7?15 : f<=3.8?30 : f<=7.125?60 : 120;
+  const iciRatio = Math.pow(dop/(scs*1000),2) * (Math.PI*Math.PI/3);
+  const sinrLin = Math.pow(10,sinr/10);
+  const sinrEffLin = 1/(1/sinrLin + iciRatio);
+  const sinrEff = 10*log10(sinrEffLin);
+  const capDL = bw*log10(1+sinrEffLin)/log10(2)*Math.min(mimo,4);
+  const capDLnoICI = bw*log10(1+sinrLin)/log10(2)*Math.min(mimo,4);
+  const degr = capDLnoICI>0 ? (1-capDL/capDLnoICI)*100 : 0;
+  const plServ = pathLoss(r[0].d, r[0].cell.h, f, document.getElementById('morph').value);
+  const ulSinrLin = Math.pow(10,serv.sinr/10);
+  const ulSinrEffLin = 1/(1/ulSinrLin + iciRatio);
+  const capUL = bw*log10(1+ulSinrEffLin)/log10(2)*Math.min(mimo,2);
+  const bestCqi=sc[0];
+  const cqiDiff=bestCqi.cqi-serv.cqi;
+  let hoType='No';
+  if(serv.cqi<1){ hoType='No — serving CQI 0 (out of range)'; }
+  else if(bestCqi.cell.name!==r[0].cell.name && bestCqi.cqi>serv.cqi){ hoType=(bestCqi.cell.tower===r[0].cell.tower ? 'YES — Intra-tower sector HO' : 'YES — Inter-tower HO'); }
+  const tr=document.createElement('tr');
+  tr.innerHTML='<td>'+u.id+'</td><td>'+u.speed+' km/h</td><td>'+Math.round(u.x)+', '+Math.round(u.y)+'</td><td>'+r[0].cell.name+' (Tower '+r[0].cell.tower+', '+r[0].cell.az+'°)</td><td>'+r[0].rsrp.toFixed(1)+'</td><td>'+bestCqi.cell.name+' / CQI '+bestCqi.cqi+' vs '+serv.cqi+' (SINR '+bestCqi.sinr.toFixed(1)+' vs '+serv.sinr.toFixed(1)+' dB)</td><td>'+hoType+' (CQI +'+cqiDiff+')</td><td>'+dop.toFixed(0)+'</td><td>'+capDL.toFixed(0)+'</td><td>'+capUL.toFixed(0)+'</td><td>'+iciRatio.toExponential(2)+'</td><td>'+degr.toFixed(2)+'% (SCS '+scs+' kHz)</td>';
+  tbody.appendChild(tr);
+ });
+ document.getElementById('status').textContent='Run done. 3GPP '+f+' GHz, '+document.getElementById('morph').value+', MIMO '+mimo+'×'+mimo+'.';
+ var _rb=document.getElementById('runBtn');_rb.textContent='Run';_rb.style.backgroundColor='#fff';_rb.style.color='';
+}
+function markStale(){var b=document.getElementById('runBtn');b.textContent='Run — settings changed';b.style.backgroundColor='#2e9e44';b.style.color='#fff';}
+var _drawTimer=null;
+function scheduleDraw(){markStale();if(_drawTimer)clearTimeout(_drawTimer);_drawTimer=setTimeout(draw,120);}
+function applyPreset(key){
+ if(!key){ return; }
+ const p=PRESETS[key];
+ const t=p.tower.toLowerCase();
+ // reset all towers to as-built, then apply the preset tower
+ ['a','b','c'].forEach(function(k){
+  document.getElementById(k+'x').value=ASBUILT[k.toUpperCase()].x;
+  document.getElementById(k+'y').value=ASBUILT[k.toUpperCase()].y;
+  document.getElementById(k+'h').value=ASBUILT[k.toUpperCase()].h;
+ });
+ document.getElementById(t+'x').value=p.x;
+ document.getElementById(t+'y').value=p.y;
+ document.getElementById(t+'h').value=p.h;
+ document.getElementById('presetNote').textContent='Preset '+key+': Tower '+p.tower+' at grid ('+p.x+', '+p.y+'), '+p.h+' m AGL — lat '+p.lat+', lon '+p.lon+'. Other towers reset to as-built (25 m assumed). Press Run.';
+ scheduleDraw();
+}
+function resetAsBuilt(){
+ ['a','b','c'].forEach(function(k){
+  document.getElementById(k+'x').value=ASBUILT[k.toUpperCase()].x;
+  document.getElementById(k+'y').value=ASBUILT[k.toUpperCase()].y;
+  document.getElementById(k+'h').value=ASBUILT[k.toUpperCase()].h;
+ });
+ document.getElementById('preset').value='';
+ document.getElementById('presetNote').textContent='As-built restored: A (250, 250), B (750, 250), C (500, 750), all 25 m assumed. Press Run.';
+ scheduleDraw();
+}
+// ---- Drag a tower marker on the map (pointer / mouse / touch) ----
+// Behaviour chosen: the marker follows the pointer and the numeric boxes
+// update live; on release (pointerup) the page recomputes automatically
+// (Run goes back to white). Nothing recomputes during the drag itself —
+// a full recompute is 3,600 cells and would jank on a phone if run on
+// every pointermove — but the drag-end recompute is fast (measured on this
+// VM's CPU; see the verification report), so release-to-recompute is both
+// reliable and immediate. One tower at a time; the others never move.
+// Pointer Events cover mouse, touch and pen; touch-action:none on the
+// canvas stops the page scrolling under the finger while dragging.
+const MAP_PX=600, SCALE=0.6; // canvas pixels per grid metre
+let dragTower=null;
+function canvasPos(e){
+ const rect=canvas.getBoundingClientRect();
+ const sx=(rect.width&&rect.width>0)?MAP_PX/rect.width:1;
+ const sy=(rect.height&&rect.height>0)?MAP_PX/rect.height:1;
+ return {px:(e.clientX-rect.left)*sx, py:(e.clientY-rect.top)*sy};
+}
+function towerAt(px,py){
+ const tws=towers();
+ let best=null, bd=1e9;
+ tws.forEach(function(t){
+  const d=Math.hypot(px-t.x*SCALE, py-t.y*SCALE);
+  if(d<bd){bd=d;best=t;}
+ });
+ return bd<=24?best:null;
+}
+canvas.addEventListener('pointerdown',function(e){
+ const p=canvasPos(e);
+ const t=towerAt(p.px,p.py);
+ if(!t) return;
+ dragTower=t.name;
+ document.getElementById('preset').value='';
+ if(canvas.setPointerCapture){ try{canvas.setPointerCapture(e.pointerId);}catch(err){} }
+ e.preventDefault();
+});
+canvas.addEventListener('pointermove',function(e){
+ if(!dragTower) return;
+ const p=canvasPos(e);
+ const gx=Math.max(0,Math.min(1000,Math.round(p.px/SCALE)));
+ const gy=Math.max(0,Math.min(1000,Math.round(p.py/SCALE)));
+ const k=dragTower.toLowerCase();
+ const ix=document.getElementById(k+'x'), iy=document.getElementById(k+'y');
+ if(+ix.value===gx && +iy.value===gy) return;
+ ix.value=gx; iy.value=gy;
+ document.getElementById('presetNote').textContent='Dragging Tower '+dragTower+' — release to recompute. Custom position; preset cleared.';
+ markStale();
+ if(lastGrid) paintGrid(lastGrid.cells);
+ e.preventDefault();
+});
+function endDrag(){
+ if(!dragTower) return;
+ dragTower=null;
+ draw();
+}
+canvas.addEventListener('pointerup',endDrag);
+canvas.addEventListener('pointercancel',endDrag);
+['freq','morph','mimo','eirp','bw','ax','ay','ah','bx','by','bh','cx','cy','ch'].forEach(function(id){var el=document.getElementById(id);el.addEventListener('input',scheduleDraw);el.addEventListener('change',scheduleDraw);});
+document.getElementById('preset').addEventListener('change',function(e){applyPreset(e.target.value);});
+document.getElementById('resetBtn').addEventListener('click',resetAsBuilt);
+document.getElementById('runBtn').addEventListener('click',draw);
+document.getElementById('animBtn').addEventListener('click',function(){
+ anim=!anim;
+ document.getElementById('animBtn').textContent=anim?'Pause movement':'Play movement';
+ if(anim){ function step(){ UEs.forEach(function(u){u.x+=u.vx*0.5; u.y+=u.vy*0.5; if(u.x<0||u.x>1000)u.vx*=-1; if(u.y<0||u.y>1000)u.vy*=-1;}); draw(); if(anim) animId=requestAnimationFrame(step);} step(); }
+});
+draw();
+</script></body></html>
