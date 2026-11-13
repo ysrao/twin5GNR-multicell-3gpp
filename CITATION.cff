@@ -1,6 +1,6 @@
 cff-version: 1.2.0
 message: "If you use this package in teaching or research, please cite it as below."
-title: "SF Multicell Twin: An Open 5G NR Ray-Tracing Lab (Sionna RT on a Free T4)"
+title: "Open Reproducible Ray-Tracing Pipeline for 5G NR Multicell Digital Twins: From Public 3D City Data to an Interactive Artefact"
 version: 1.0.0
 date-released: 2026-11-13
 authors:
