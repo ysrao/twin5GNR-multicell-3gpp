@@ -6,6 +6,8 @@ date-released: 2026-11-13
 authors:
   - family-names: Yenamandra
     given-names: Rao S.
+  - family-names: Lalwani
+    given-names: Sameer
 license: MIT
 repository-code: "https://github.com/ysrao/twin5GNR-multicell-SF"
 url: "https://ysrao.github.io/twin5GNR-multicell-SF/twin5GNR-multicell-SionnaRT-EvalMesh-Nov13.html"
