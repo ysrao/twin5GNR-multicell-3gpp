@@ -30,7 +30,7 @@ Cell B <input id="bx" value="750" size="4">,<input id="by" value="250" size="4">
 Cell C <input id="cx" value="500" size="4">,<input id="cy" value="750" size="4"></label>
 </div>
 <p id="fixedNote" class="note" style="display:none"><b>Fixed-band Sionna data:</b> Frequency, Morphology and MIMO apply to the 3GPP model only — Sionna data are fixed-band (3.6 GHz).</p>
-<p id="runBar" class="runbar"><button id="runBtn">Run</button> <button id="animBtn">Play movement</button> <span id="status"></span></p>
+<p id="runBar" class="runbar"><button id="runBtn">Run</button> <button id="animBtn">Play movement</button> <a id="colabRunBtn" href="https://colab.research.google.com/drive/1N_8UYlC4-CAJZH1zzeMLSJArcV7XsZmz" target="_blank" rel="noopener" style="display:inline-block;padding:3px 12px;border:1px solid #888;border-radius:4px;background:#f6a609;color:#000;text-decoration:none;font-weight:bold">&#9654; Run Sionna RT on T4 (Colab)</a> <span id="status"></span></p><div class="note"><b>Sionna RT towers for the results on this page</b> &mdash; taken from <b>SF_sites_for_Sameer.csv</b> (variant as-built): A (&minus;250, +250) &middot; B (+250, +250) &middot; C (0, &minus;250) m ENU. This page cannot ray-trace in the browser; to move the towers, choose the CSV rows in the notebook (cell 4b) and Run there &mdash; the T4 does the trace, and the new output wires into a page like this one.</div>
 <canvas id="map" width="600" height="600"></canvas>
 <p class="legend">
 <span style="background:#2f7fe0"></span>Cell A &nbsp;
