@@ -9,6 +9,7 @@ authors:
   - family-names: Lalwani
     given-names: Sameer
 license: MIT
+doi: "10.5281/zenodo.24210760"
 repository-code: "https://github.com/ysrao/twin5GNR-multicell-SF"
 url: "https://ysrao.github.io/twin5GNR-multicell-SF/twin5GNR-multicell-SionnaRT-EvalMesh-Nov13.html"
 abstract: >-
