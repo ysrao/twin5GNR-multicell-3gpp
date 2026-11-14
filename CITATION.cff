@@ -8,6 +8,10 @@ authors:
     given-names: Rao S.
   - family-names: Lalwani
     given-names: Sameer
+  - family-names: Nsofu
+    given-names: Mubanga
+  - family-names: Ram
+    given-names: Asokan
 license: MIT
 doi: "10.5281/zenodo.24210760"
 repository-code: "https://github.com/ysrao/twin5GNR-multicell-SF"
